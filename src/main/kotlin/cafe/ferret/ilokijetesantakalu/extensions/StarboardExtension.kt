@@ -6,6 +6,7 @@ import cafe.ferret.ilokijetesantakalu.database.entities.StarredMessage
 import com.kotlindiscord.kord.extensions.checks.anyGuild
 import com.kotlindiscord.kord.extensions.commands.Arguments
 import com.kotlindiscord.kord.extensions.commands.converters.impl.channel
+import com.kotlindiscord.kord.extensions.commands.converters.impl.int
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.extensions.publicSlashCommand
@@ -48,9 +49,11 @@ class StarboardExtension : Extension() {
                     bot.logger.debug("Message ${starredMessage._id} starred, now has ${starredMessage.stars}")
                 }
 
-                val starboardChannel = configCollection.get(event.guildId!!)?.starboardChannel
-                if (starboardChannel != null && starredMessage.stars >= 3) {
-                    updateStarboard(starredMessage, starboardChannel)
+                val config = configCollection.get(event.guildId!!)
+
+                val starboardChannel = config?.starboardChannel
+                if (starboardChannel != null && starredMessage.stars >= config.starsRequired) {
+                    updateStarboard(starredMessage, starboardChannel, event.guildId!!)
                 }
             }
         }
@@ -63,7 +66,8 @@ class StarboardExtension : Extension() {
 
             action {
                 val starredMessage = starredMessageCollection.get(event.messageId)
-                val starboardChannel = configCollection.get(event.guildId!!)?.starboardChannel
+                val config = configCollection.get(event.guildId!!)
+                val starboardChannel = config?.starboardChannel
 
                 if (starredMessage == null) {
                     // Getting the stars that already exist on the message, if any
@@ -81,8 +85,8 @@ class StarboardExtension : Extension() {
                             StarredMessage(event.messageId, existingStars, event.message.channelId, null)
                         starredMessageCollection.set(newStarredMessage)
 
-                        if (starboardChannel != null && newStarredMessage.stars >= 3) {
-                            updateStarboard(newStarredMessage, starboardChannel)
+                        if (starboardChannel != null && newStarredMessage.stars >= config.starsRequired) {
+                            updateStarboard(newStarredMessage, starboardChannel, event.guildId!!)
                         }
                     }
                 } else {
@@ -92,7 +96,7 @@ class StarboardExtension : Extension() {
                     bot.logger.debug("Message ${starredMessage._id} unstarred, now has ${starredMessage.stars}")
 
                     if (starboardChannel != null) {
-                        updateStarboard(starredMessage, starboardChannel)
+                        updateStarboard(starredMessage, starboardChannel, event.guildId!!)
                     }
                 }
 
@@ -111,13 +115,6 @@ class StarboardExtension : Extension() {
             action {
                 val config = configCollection.get(guild!!.id)
 
-                if (this@publicSlashCommand.kord.getChannelOf<Category>(arguments.starboardChannel.id) != null) {
-                    respond {
-                        content = "**Error:** That is not a valid channel!"
-                    }
-                    return@action
-                }
-
                 if (config != null) {
                     config.starboardChannel = arguments.starboardChannel.id
                     configCollection.set(config)
@@ -132,12 +129,51 @@ class StarboardExtension : Extension() {
                 }
             }
         }
+
+        publicSlashCommand(::StarboardStarsRequiredCommandArguments) {
+            name = "starsrequired"
+            description = "Set the stars required for a message to go on the starboard."
+
+            check {
+                anyGuild()
+            }
+
+            action {
+                val config = configCollection.get(guild!!.id)
+
+                if (config == null) {
+                    configCollection.new(guild!!.id, null, arguments.starsRequired)
+                } else {
+                    config.starsRequired = arguments.starsRequired
+                    configCollection.set(config)
+                }
+
+                respond {
+                    content = "Set your stars required to ${arguments.starsRequired}"
+                }
+            }
+        }
     }
 
     inner class StarboardSetupCommandArguments : Arguments() {
         val starboardChannel by channel {
             name = "starboardChannel"
             description = "The channel you want to set the starboard to be in."
+
+            validate {
+                failIf("That is not a valid channel!") { kord.getChannelOf<Category>(value.id) != null }
+            }
+        }
+    }
+
+    inner class StarboardStarsRequiredCommandArguments : Arguments() {
+        val starsRequired by int {
+            name = "starsRequired"
+            description = "The number of stars you want before a message gets on the starboard."
+
+            validate {
+                failIf("That is a number less than 1!") { value < 1 }
+            }
         }
     }
 
@@ -145,7 +181,11 @@ class StarboardExtension : Extension() {
      * Updates the starboard with a new message or editing an old one.
      * @return The StarredMessage with its new starboard message, or null if the starboard channel, starred message channel, or starred message is null.
      */
-    private suspend fun updateStarboard(starredMessage: StarredMessage, starboard: Snowflake): StarredMessage? {
+    private suspend fun updateStarboard(
+        starredMessage: StarredMessage,
+        starboard: Snowflake,
+        guild: Snowflake
+    ): StarredMessage? {
         bot.logger.debug("Updating starboard")
         val starboardChannel = kord.getChannelOf<GuildMessageChannel>(starboard) ?: return null
         val starboardMessage = starredMessage.starboardMessage?.let { starboardChannel.getMessageOrNull(it) }
@@ -190,7 +230,7 @@ class StarboardExtension : Extension() {
                 }
             }.id
         } else {
-            if (starredMessage.stars < 3) {
+            if (starredMessage.stars < configCollection.get(guild)!!.starsRequired) {
                 starboardMessage.delete()
                 return starredMessage
             }

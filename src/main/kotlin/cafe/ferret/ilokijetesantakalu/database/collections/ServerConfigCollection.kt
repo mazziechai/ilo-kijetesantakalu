@@ -12,7 +12,8 @@ class ServerConfigCollection : KoinComponent {
     private val database: Database by inject()
     private val col = database.mongo.getCollection<ServerConfig>(name)
 
-    suspend fun new(id: Snowflake, channel: Snowflake?) = set(ServerConfig(id, channel, 5))
+    suspend fun new(id: Snowflake, channel: Snowflake?, starsRequired: Int = 5) =
+        set(ServerConfig(id, channel, starsRequired))
 
     suspend fun get(id: Snowflake) = col.findOne(ServerConfig::_id eq id)
     suspend fun set(config: ServerConfig) = col.save(config)
