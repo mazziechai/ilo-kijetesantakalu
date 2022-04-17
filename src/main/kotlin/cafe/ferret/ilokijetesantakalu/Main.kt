@@ -10,12 +10,14 @@ val TEST_SERVER_ID = Snowflake(
 )
 
 private val TOKEN = env("TOKEN")   // Get the bot's token from the env vars or a .env file
+private val ENVIRONMENT = env("ENVIRONMENT")
+
 
 suspend fun main() {
     val bot = ExtensibleBot(TOKEN) {
         database()
         applicationCommands {
-            defaultGuild(TEST_SERVER_ID)
+            if (ENVIRONMENT != "production") defaultGuild(TEST_SERVER_ID)
         }
         extensions {
             add(::StarboardExtension)
