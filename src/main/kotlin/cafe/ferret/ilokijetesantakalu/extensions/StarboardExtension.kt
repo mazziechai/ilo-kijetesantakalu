@@ -179,11 +179,13 @@ class StarboardExtension : Extension() {
             action {
                 val config = configCollection.get(guild!!.id) ?: configCollection.new(guild!!.id, null, 5, null, null)
 
-                respond {
+                val msg = respond {
                     content = "Please react to this message with the emoji you wish to use."
                 }
 
-                val event = this@publicSlashCommand.kord.waitFor<ReactionAddEvent>(30 * 1000)
+                val event = this@publicSlashCommand.kord.waitFor<ReactionAddEvent>(30 * 1000) {
+                    message == msg.message
+                }
 
                 if (event == null) {
                     edit {
