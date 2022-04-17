@@ -219,7 +219,6 @@ class StarboardExtension : Extension() {
                     }
                 }
 
-                bot.logger.debug(config.toString())
                 configCollection.set(config)
             }
         }
