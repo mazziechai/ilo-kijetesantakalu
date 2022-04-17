@@ -10,17 +10,21 @@ import com.kotlindiscord.kord.extensions.commands.converters.impl.int
 import com.kotlindiscord.kord.extensions.extensions.Extension
 import com.kotlindiscord.kord.extensions.extensions.event
 import com.kotlindiscord.kord.extensions.extensions.publicSlashCommand
+import com.kotlindiscord.kord.extensions.types.edit
 import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.authorId
 import com.kotlindiscord.kord.extensions.utils.getJumpUrl
+import com.kotlindiscord.kord.extensions.utils.waitFor
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.channel.createMessage
 import dev.kord.core.behavior.edit
+import dev.kord.core.entity.ReactionEmoji
 import dev.kord.core.entity.channel.Category
 import dev.kord.core.entity.channel.GuildMessageChannel
 import dev.kord.core.event.message.ReactionAddEvent
 import dev.kord.core.event.message.ReactionRemoveEvent
 import dev.kord.rest.builder.message.create.embed
+import dev.kord.rest.request.RestRequestException
 import org.koin.core.component.inject
 
 class StarboardExtension : Extension() {
@@ -33,27 +37,32 @@ class StarboardExtension : Extension() {
         event<ReactionAddEvent> {
             check {
                 failIf(event.guild == null)
-                failIf(event.emoji.name != "⭐")
             }
 
             action {
+                val config = configCollection.get(event.guildId!!)
                 var starredMessage = starredMessageCollection.get(event.messageId)
 
-                if (starredMessage == null) {
-                    starredMessage = starredMessageCollection.new(event.messageId, event.message.channelId)
-                    bot.logger.debug("New message ${event.messageId} starred")
+                // Checking if the emoji is the same as the config while checking for null.
+                val correctEmoji =
+                    if (config?.guildEmoji != null && (event.emoji as? ReactionEmoji.Custom)?.id == config.guildEmoji) true
+                    else config?.unicodeEmoji != null && event.emoji.name == config.unicodeEmoji
 
-                } else {
-                    starredMessage.stars++
-                    starredMessageCollection.set(starredMessage)
-                    bot.logger.debug("Message ${starredMessage._id} starred, now has ${starredMessage.stars}")
-                }
+                if (correctEmoji) {
+                    if (starredMessage == null) {
+                        starredMessage = starredMessageCollection.new(event.messageId, event.message.channelId)
+                        bot.logger.debug("New message ${event.messageId} starred")
 
-                val config = configCollection.get(event.guildId!!)
+                    } else {
+                        starredMessage.stars++
+                        starredMessageCollection.set(starredMessage)
+                        bot.logger.debug("Message ${starredMessage._id} starred, now has ${starredMessage.stars}")
+                    }
 
-                val starboardChannel = config?.starboardChannel
-                if (starboardChannel != null && starredMessage.stars >= config.starsRequired) {
-                    updateStarboard(starredMessage, starboardChannel, event.guildId!!)
+                    val starboardChannel = config?.starboardChannel
+                    if (starboardChannel != null && starredMessage.stars >= config.starsRequired) {
+                        updateStarboard(starredMessage, starboardChannel, event.guildId!!)
+                    }
                 }
             }
         }
@@ -61,7 +70,6 @@ class StarboardExtension : Extension() {
         event<ReactionRemoveEvent> {
             check {
                 failIf(event.guild == null)
-                failIf(event.emoji.name != "⭐")
             }
 
             action {
@@ -72,9 +80,17 @@ class StarboardExtension : Extension() {
                 if (starredMessage == null) {
                     // Getting the stars that already exist on the message, if any
                     var existingStars = 0
-                    for (reaction in event.message.asMessage().reactions) {
-                        if (reaction.emoji.name == "⭐") {
-                            existingStars++
+                    if (config?.guildEmoji != null) {
+                        for (reaction in event.message.asMessage().reactions) {
+                            if (reaction.id == config.guildEmoji) {
+                                existingStars++
+                            }
+                        }
+                    } else if (config?.unicodeEmoji != null) {
+                        for (reaction in event.message.asMessage().reactions) {
+                            if (reaction.emoji.name == config.unicodeEmoji) {
+                                existingStars++
+                            }
                         }
                     }
 
@@ -99,8 +115,6 @@ class StarboardExtension : Extension() {
                         updateStarboard(starredMessage, starboardChannel, event.guildId!!)
                     }
                 }
-
-
             }
         }
 
@@ -153,6 +167,62 @@ class StarboardExtension : Extension() {
                 }
             }
         }
+
+        publicSlashCommand() {
+            name = "setemoji"
+            description = "Set an emoji to use with a reaction. Note that the emoji must be usable by the bot."
+
+            check {
+                anyGuild()
+            }
+
+            action {
+                val config = configCollection.get(guild!!.id) ?: configCollection.new(guild!!.id, null, 5, null, null)
+
+                respond {
+                    content = "Please react to this message with the emoji you wish to use."
+                }
+
+                val event = this@publicSlashCommand.kord.waitFor<ReactionAddEvent>(30 * 1000)
+
+                if (event == null) {
+                    edit {
+                        content = "You did not react in time..."
+                    }
+                    return@action
+                }
+
+                when (event.emoji) {
+                    is ReactionEmoji.Unicode -> {
+                        config.unicodeEmoji = (event.emoji as ReactionEmoji.Unicode).name
+                        config.guildEmoji = null
+                    }
+                    is ReactionEmoji.Custom -> {
+                        config.unicodeEmoji = null
+                        config.guildEmoji = (event.emoji as ReactionEmoji.Custom).id
+                    }
+                    else -> {
+                        bot.logger.debug("something has gone terrible wrong with emojis")
+                    }
+                }
+
+                try {
+                    event.message.deleteAllReactions()
+                    event.message.addReaction(event.emoji)
+
+                    edit {
+                        content = "Set your emoji to ${event.emoji.mention}"
+                    }
+                } catch (exception: RestRequestException) {
+                    edit {
+                        content = "Something went wrong. Probably because the bot can't use that emoji."
+                    }
+                }
+
+                bot.logger.debug(config.toString())
+                configCollection.set(config)
+            }
+        }
     }
 
     inner class StarboardSetupCommandArguments : Arguments() {
@@ -195,6 +265,10 @@ class StarboardExtension : Extension() {
 
         // If author is null, this means it's a webhook and needs to be treated separately
         val webhook = starredMessageEntity.author == null
+
+        if (starredMessageEntity.author == kord.getSelf()) {
+            return null
+        }
 
         if (starboardMessage == null) {
             starredMessage.starboardMessage = starboardChannel.createMessage {
