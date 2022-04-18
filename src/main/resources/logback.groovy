@@ -1,4 +1,5 @@
 import ch.qos.logback.core.joran.spi.ConsoleTarget
+import ch.qos.logback.core.util.FileSize
 
 def environment = System.getenv().getOrDefault("ENVIRONMENT", "dev")
 
@@ -23,5 +24,22 @@ appender("CONSOLE", ConsoleAppender) {
     target = defaultTarget
 }
 
-root(defaultLevel, ["CONSOLE"])
+def fileName = "./bot.log"
+
+appender("FILE", RollingFileAppender) {
+    encoder(PatternLayoutEncoder) {
+        pattern = "%d{yyyy-MM-dd}%d{HH:mm:ss} | %5level | %40.40logger{40} | %msg%n"
+    }
+
+    file = fileName
+
+    rollingPolicy(TimeBasedRollingPolicy) {
+        fileNamePattern = "${fileName}.%d{yyyy-MM-dd}.gz"
+
+        maxHistory = 14
+        totalSizeCap = FileSize.valueOf("3 gb")
+    }
+}
+
+root(defaultLevel, ["CONSOLE", "FILE"])
 logger("org.mongodb.driver", INFO)
