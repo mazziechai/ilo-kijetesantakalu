@@ -16,7 +16,7 @@ class ServerConfigCollection : KoinComponent {
         id: Snowflake,
         channel: Snowflake? = null,
         starsRequired: Int = 5,
-        unicode: String? = null,
+        unicode: String? = "⭐",
         guildEmoji: Snowflake? = null
     ): ServerConfig {
         val config = ServerConfig(id, channel, starsRequired, unicode, guildEmoji)
