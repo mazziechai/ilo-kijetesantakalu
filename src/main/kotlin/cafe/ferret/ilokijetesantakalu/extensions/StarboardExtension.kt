@@ -24,7 +24,6 @@ import dev.kord.core.entity.channel.GuildMessageChannel
 import dev.kord.core.event.message.ReactionAddEvent
 import dev.kord.core.event.message.ReactionRemoveEvent
 import dev.kord.rest.builder.message.create.embed
-import dev.kord.rest.request.RestRequestException
 import org.koin.core.component.inject
 
 class StarboardExtension : Extension() {
@@ -208,17 +207,11 @@ class StarboardExtension : Extension() {
                     }
                 }
 
-                try {
-                    event.message.deleteAllReactions()
-                    event.message.addReaction(event.emoji)
+                event.message.deleteAllReactions()
+                event.message.addReaction(event.emoji)
 
-                    edit {
-                        content = "Set your emoji to ${event.emoji.mention}"
-                    }
-                } catch (exception: RestRequestException) {
-                    edit {
-                        content = "Something went wrong. Probably because the bot can't use that emoji."
-                    }
+                edit {
+                    content = "Set your emoji to ${event.emoji.mention}"
                 }
 
                 configCollection.set(config)
