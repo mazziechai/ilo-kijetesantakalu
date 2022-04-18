@@ -15,6 +15,7 @@ import com.kotlindiscord.kord.extensions.types.respond
 import com.kotlindiscord.kord.extensions.utils.authorId
 import com.kotlindiscord.kord.extensions.utils.getJumpUrl
 import com.kotlindiscord.kord.extensions.utils.waitFor
+import dev.kord.common.Color
 import dev.kord.common.entity.Snowflake
 import dev.kord.core.behavior.channel.createMessage
 import dev.kord.core.behavior.edit
@@ -295,6 +296,8 @@ class StarboardExtension : Extension() {
                         }
                         image = attachments.first().url
                     }
+
+                    color = Color(0x9966ff)
                 }
             }.id
         } else {
