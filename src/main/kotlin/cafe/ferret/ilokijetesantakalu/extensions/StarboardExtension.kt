@@ -297,6 +297,10 @@ class StarboardExtension : Extension() {
                         image = attachments.first().url
                     }
 
+                    footer {
+                        text = "ID: ${starredMessageEntity.id}"
+                    }
+
                     color = Color(0x9966ff)
                 }
             }.id
