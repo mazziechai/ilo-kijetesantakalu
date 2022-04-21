@@ -33,4 +33,8 @@ class Database(connectionString: String) {
 
     private val client = KMongo.createClient(clientSettings).coroutine
     val mongo = client.getDatabase("ilokijetesantakalu")
+
+    suspend fun migrate() {
+        Migrations.migrate()
+    }
 }

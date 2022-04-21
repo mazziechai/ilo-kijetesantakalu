@@ -15,7 +15,7 @@ private val ENVIRONMENT = env("ENVIRONMENT")
 
 suspend fun main() {
     val bot = ExtensibleBot(TOKEN) {
-        database()
+        database(true)
         applicationCommands {
             if (ENVIRONMENT != "production") defaultGuild(TEST_SERVER_ID)
         }
